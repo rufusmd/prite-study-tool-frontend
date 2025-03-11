@@ -1,263 +1,90 @@
-import React, { useState, useEffect } from 'react';
+// src/components/study/ExplanationGenerator.jsx
+import { useState } from 'react';
+import { explanationApi } from '../../api';
 import LoadingSpinner from '../common/LoadingSpinner';
-import Alert from '../common/Alert';
-import explanationService from '../../services/explanationService';
-import api from '../../utils/api'; // Add this import
 
-const ExplanationGenerator = ({ question, onSave, onCancel }) => {
-    const [loading, setLoading] = useState(false);
+const ExplanationGenerator = ({ question, isVisible = false }) => {
     const [explanation, setExplanation] = useState('');
-    const [alert, setAlert] = useState(null);
-    const [isEditing, setIsEditing] = useState(false);
-    const TIMEOUT_DURATION = 30000; // 30 seconds
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [generated, setGenerated] = useState(false);
 
-    // Check local storage for cached explanation on component mount
-    useEffect(() => {
-        if (question?._id) {
-            try {
-                const cachedExplanation = localStorage.getItem(`explanation_${question._id}`);
-                if (cachedExplanation && !explanation) {
-                    setExplanation(cachedExplanation);
-                }
-            } catch (error) {
-                // Ignore localStorage errors
-                console.error('Error reading from localStorage:', error);
-            }
-        }
-    }, [question, explanation]);
-
-    // Generate explanation using the dedicated explanation service
-    // In your ExplanationGenerator.jsx component
+    // Generate explanation using Claude API
     const generateExplanation = async () => {
-        if (!question) return;
-
         try {
             setLoading(true);
-            setAlert(null);
+            setError(null);
 
-            // Set timeout for long-running requests
-            const timeoutId = setTimeout(() => {
-                if (loading) {
-                    setLoading(false);
-                    setAlert({
-                        type: 'warning',
-                        message: 'Explanation generation is taking longer than expected. Please try again.'
-                    });
-                }
-            }, TIMEOUT_DURATION);
+            // Extract needed question data
+            const questionData = {
+                question: question.text,
+                options: question.options,
+                correctAnswer: question.correctAnswer
+            };
 
-            // Use the existing claude API directly
-            const response = await api.post('/claude', {
-                text: `Provide a detailed explanation for this PRITE question: ${question.text}`,
-                format: 'text',
-                customPrompt: `You are a medical educator explaining a PRITE question.
-      The correct answer is ${question.correctAnswer} (${question.options[question.correctAnswer]}).
-      Explain in detail why this answer is correct and why each other option is incorrect.
-      DO NOT reformat or extract the question - ONLY provide an educational explanation.`
-            });
+            const response = await explanationApi.generateExplanation(questionData);
 
-            // Clear timeout as response received
-            clearTimeout(timeoutId);
-
-            if (response.data && response.data.success) {
-                setExplanation(response.data.data);
-                setIsEditing(true);
-
-                // Save to localStorage as backup
-                try {
-                    localStorage.setItem(`explanation_${question._id}`, response.data.data);
-                } catch (storageError) {
-                    // Ignore localStorage errors
-                    console.error('Error saving to localStorage:', storageError);
-                }
+            if (response.success) {
+                setExplanation(response.explanation);
+                setGenerated(true);
             } else {
-                throw new Error(response.data?.error || 'Failed to generate explanation');
+                throw new Error(response.error || 'Failed to generate explanation');
             }
         } catch (error) {
             console.error('Error generating explanation:', error);
-            setAlert({
-                type: 'error',
-                message: error.message || 'Failed to generate explanation'
-            });
+            setError(error.message || 'Failed to generate explanation');
         } finally {
             setLoading(false);
         }
     };
 
-    // Save explanation to the database
-    const saveExplanation = async () => {
-        try {
-            setLoading(true);
-
-            // Use explanation service to save the explanation
-            const response = await explanationService.saveExplanation(question._id, explanation);
-
-            if (response.success) {
-                setAlert({
-                    type: 'success',
-                    message: 'Explanation saved successfully!'
-                });
-
-                // Update localStorage with saved version
-                try {
-                    localStorage.setItem(`explanation_${question._id}`, explanation);
-                } catch (storageError) {
-                    // Ignore localStorage errors
-                    console.error('Error updating localStorage:', storageError);
-                }
-
-                // Notify parent component
-                if (onSave) {
-                    onSave({
-                        ...question,
-                        explanation
-                    });
-                }
-            } else {
-                throw new Error(response.error || 'Failed to save explanation');
-            }
-        } catch (error) {
-            console.error('Error saving explanation:', error);
-            setAlert({
-                type: 'error',
-                message: error.message || 'Failed to save explanation'
-            });
-        } finally {
-            setLoading(false);
-        }
-    };
+    if (!isVisible) {
+        return null;
+    }
 
     return (
-        <div className="p-4 bg-white rounded-lg shadow">
-            <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-bold">Explanation Generator</h2>
-
-                {onCancel && (
-                    <button
-                        onClick={onCancel}
-                        className="text-gray-500 hover:text-gray-700"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                        </svg>
-                    </button>
-                )}
-            </div>
-
-            {alert && (
-                <Alert
-                    type={alert.type}
-                    message={alert.message}
-                    onClose={() => setAlert(null)}
-                    className="mb-4"
-                />
+        <div className="mt-6 border-t pt-4">
+            {!generated && !loading && (
+                <button
+                    onClick={generateExplanation}
+                    className="btn btn-secondary"
+                    disabled={loading}
+                >
+                    Generate Detailed Explanation
+                </button>
             )}
 
-            {/* Question preview */}
-            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                <p className="font-medium">{question?.text}</p>
-
-                <div className="mt-2 space-y-1">
-                    {question?.options && Object.entries(question.options).map(([letter, text]) => (
-                        <div
-                            key={letter}
-                            className={`${letter === question.correctAnswer ? 'font-medium text-green-600' : ''}`}
-                        >
-                            <span className="font-bold">{letter}:</span> {text}
-                        </div>
-                    ))}
+            {loading && (
+                <div className="flex items-center justify-center py-6">
+                    <LoadingSpinner size="medium" />
+                    <span className="ml-3 text-gray-600">Generating detailed explanation...</span>
                 </div>
-            </div>
+            )}
 
-            {/* Explanation area */}
-            {isEditing ? (
-                <div className="mb-4">
-                    <label className="block text-sm font-medium mb-1">Explanation:</label>
-                    <textarea
-                        value={explanation}
-                        onChange={(e) => setExplanation(e.target.value)}
-                        className="w-full p-2 border rounded-md"
-                        rows="12"
-                        placeholder="Edit the generated explanation here..."
-                    />
-                </div>
-            ) : explanation ? (
-                <div className="mb-4 mt-4 p-4 bg-gray-50 rounded-lg border-l-4 border-gray-600 whitespace-pre-wrap">
-                    {explanation}
-                </div>
-            ) : null}
-
-            {/* Action buttons */}
-            <div className="flex justify-end space-x-2">
-                {!explanation && !isEditing && (
+            {error && (
+                <div className="bg-red-50 text-red-700 p-4 rounded-md my-4">
+                    <p className="font-bold">Error generating explanation:</p>
+                    <p>{error}</p>
                     <button
                         onClick={generateExplanation}
-                        disabled={loading}
-                        className="btn btn-primary"
+                        className="mt-2 text-sm underline"
                     >
-                        {loading ? (
-                            <>
-                                <LoadingSpinner size="small" />
-                                <span className="ml-2">Generating...</span>
-                            </>
-                        ) : (
-                            'Generate Explanation'
-                        )}
+                        Try again
                     </button>
-                )}
+                </div>
+            )}
 
-                {explanation && !isEditing && (
-                    <>
-                        <button
-                            onClick={() => setIsEditing(true)}
-                            className="btn btn-secondary"
-                        >
-                            Edit
-                        </button>
+            {generated && explanation && (
+                <div className="mt-4">
+                    <h3 className="font-bold text-lg mb-4">Detailed Explanation</h3>
 
-                        <button
-                            onClick={saveExplanation}
-                            disabled={loading}
-                            className="btn btn-primary"
-                        >
-                            {loading ? (
-                                <>
-                                    <LoadingSpinner size="small" />
-                                    <span className="ml-2">Saving...</span>
-                                </>
-                            ) : (
-                                'Save Explanation'
-                            )}
-                        </button>
-                    </>
-                )}
-
-                {isEditing && (
-                    <>
-                        <button
-                            onClick={() => setIsEditing(false)}
-                            className="btn btn-secondary"
-                        >
-                            Cancel Editing
-                        </button>
-
-                        <button
-                            onClick={saveExplanation}
-                            disabled={loading}
-                            className="btn btn-primary"
-                        >
-                            {loading ? (
-                                <>
-                                    <LoadingSpinner size="small" />
-                                    <span className="ml-2">Saving...</span>
-                                </>
-                            ) : (
-                                'Save Explanation'
-                            )}
-                        </button>
-                    </>
-                )}
-            </div>
+                    <div className="prose max-w-none">
+                        {explanation.split('\n\n').map((paragraph, index) => (
+                            <p key={index} className="mb-4">{paragraph}</p>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

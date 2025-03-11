@@ -2,6 +2,7 @@
 import { useState, useContext } from 'react';
 import { QuestionContext } from '../../contexts/QuestionContext';
 import LoadingSpinner from '../common/LoadingSpinner';
+import ExplanationGenerator from '../study/ExplanationGenerator';
 
 const SessionReview = ({ sessionQuestions, onStartNewSession }) => {
     const [reviewIndex, setReviewIndex] = useState(0);
@@ -141,7 +142,12 @@ const SessionReview = ({ sessionQuestions, onStartNewSession }) => {
                         </div>
                     )}
                 </div>
-            </div>
+
+                {/* Add the ExplanationGenerator component right after */}
+                <ExplanationGenerator
+                    question={question}
+                    isVisible={true}
+                />
 
             <div className="flex justify-between mt-6">
                 <button
