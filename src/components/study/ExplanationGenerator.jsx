@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import LoadingSpinner from '../common/LoadingSpinner';
 import Alert from '../common/Alert';
 import explanationService from '../../services/explanationService';
+import api from '../../utils/api'; // Add this import
 
 const ExplanationGenerator = ({ question, onSave, onCancel }) => {
     const [loading, setLoading] = useState(false);
