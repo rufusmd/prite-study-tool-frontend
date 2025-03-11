@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import LoadingSpinner from '../common/LoadingSpinner';
 import Alert from '../common/Alert';
-import claudeService from '../../services/claudeService';
-import api from '../../utils/api';
+import explanationService from '../../services/explanationService';
 
 const ExplanationGenerator = ({ question, onSave, onCancel }) => {
     const [loading, setLoading] = useState(false);
@@ -26,7 +25,7 @@ const ExplanationGenerator = ({ question, onSave, onCancel }) => {
         }
     }, [question, explanation]);
 
-    // Generate explanation using Claude API
+    // Generate explanation using the dedicated explanation service
     const generateExplanation = async () => {
         if (!question) return;
 
@@ -45,34 +44,8 @@ const ExplanationGenerator = ({ question, onSave, onCancel }) => {
                 }
             }, TIMEOUT_DURATION);
 
-            // Prepare prompt for Claude
-            const correctAnswerText = question.options[question.correctAnswer];
-            const incorrectOptions = Object.entries(question.options)
-                .filter(([letter]) => letter !== question.correctAnswer)
-                .map(([letter, text]) => `${letter}. ${text}`)
-                .join('\n');
-
-            const prompt = `You are a world-class expert in psychiatry, neurology, and all medical topics covered in the PRITE (Psychiatry Resident In-Training Examination). 
-
-Please provide a comprehensive explanation for the following PRITE question:
-
-Question: ${question.text}
-
-Options:
-${Object.entries(question.options).map(([letter, text]) => `${letter}. ${text}`).join('\n')}
-
-Correct answer: ${question.correctAnswer}. ${correctAnswerText}
-
-Please structure your explanation as follows:
-1. A thorough explanation (3-4 paragraphs) of why answer ${question.correctAnswer} is correct, covering relevant pathophysiology, diagnostic criteria, and clinical implications.
-2. A concise 2-3 sentence summary of why answer ${question.correctAnswer} is correct.
-3. For each incorrect option, provide 2-3 sentences explaining why it is incorrect:
-   - Why option ${incorrectOptions.split('\n').map(line => line.charAt(0)).join(', ')} are incorrect.
-
-Be authoritative, accurate, and educational in your explanation, similar to UWorld explanations. Include relevant DSM-5 criteria, clinical pearls, and high-yield information for board exams.`;
-
-            // Call Claude API
-            const response = await claudeService.processText(prompt, 'text');
+            // Call the dedicated explanation service
+            const response = await explanationService.generateExplanation(question);
 
             // Clear timeout as response received
             clearTimeout(timeoutId);
@@ -107,12 +80,10 @@ Be authoritative, accurate, and educational in your explanation, similar to UWor
         try {
             setLoading(true);
 
-            // Update the question with the explanation
-            const response = await api.patch(`/questions/${question._id}`, {
-                explanation: explanation
-            });
+            // Use explanation service to save the explanation
+            const response = await explanationService.saveExplanation(question._id, explanation);
 
-            if (response.data) {
+            if (response.success) {
                 setAlert({
                     type: 'success',
                     message: 'Explanation saved successfully!'
@@ -134,7 +105,7 @@ Be authoritative, accurate, and educational in your explanation, similar to UWor
                     });
                 }
             } else {
-                throw new Error('Failed to save explanation');
+                throw new Error(response.error || 'Failed to save explanation');
             }
         } catch (error) {
             console.error('Error saving explanation:', error);
