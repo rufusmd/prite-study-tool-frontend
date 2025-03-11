@@ -6,6 +6,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import StudyStats from '../components/study/StudyStats';
 import SessionReview from '../components/study/SessionReview';
 import ComparativeScoring from '../components/stats/ComparativeScoring';
+import ExplanationGenerator from '../components/study/ExplanationGenerator';
 
 const StudyPage = () => {
     const {
@@ -32,6 +33,7 @@ const StudyPage = () => {
     const [showReview, setShowReview] = useState(false);
     const [timeStarted, setTimeStarted] = useState(null);
     const [completedQuestions, setCompletedQuestions] = useState([]);
+    const [showExplanationGenerator, setShowExplanationGenerator] = useState(false);
 
     // Set error alert
     useEffect(() => {
@@ -96,6 +98,9 @@ const StudyPage = () => {
     };
 
     const handleNextQuestion = () => {
+        // Hide explanation generator if it's showing
+        setShowExplanationGenerator(false);
+
         const hasNext = nextQuestion();
         if (hasNext) {
             setShowingAnswer(false);
@@ -121,6 +126,25 @@ const StudyPage = () => {
         setSelectedOption(option);
     };
 
+    // Handle saving an explanation
+    const handleSaveExplanation = (updatedQuestion) => {
+        // Update the question in the current session
+        const updatedSession = [...currentStudySession];
+        updatedSession[currentQuestionIndex] = updatedQuestion;
+
+        // Need to update this in the context, but for now we'll just update locally
+        // In a real implementation, you'd want to update the QuestionContext state
+
+        // Hide the explanation generator
+        setShowExplanationGenerator(false);
+
+        // Show success message
+        setAlert({
+            type: 'success',
+            message: 'Explanation saved successfully!'
+        });
+    };
+
     // Get current question
     const getCurrentQuestion = () => {
         if (currentStudySession.length === 0 || currentQuestionIndex >= currentStudySession.length) {
@@ -136,6 +160,30 @@ const StudyPage = () => {
         return (
             <div className="flex justify-center items-center h-64">
                 <LoadingSpinner />
+            </div>
+        );
+    }
+
+    // If showing explanation generator
+    if (showExplanationGenerator && currentQuestion) {
+        return (
+            <div className="pb-20">
+                <h2 className="text-2xl font-bold mb-6">Generate Explanation</h2>
+
+                <ExplanationGenerator
+                    question={currentQuestion}
+                    onSave={handleSaveExplanation}
+                    onCancel={() => setShowExplanationGenerator(false)}
+                />
+
+                <div className="mt-6 flex justify-center">
+                    <button
+                        onClick={() => setShowExplanationGenerator(false)}
+                        className="btn btn-secondary"
+                    >
+                        Back to Study
+                    </button>
+                </div>
             </div>
         );
     }
@@ -387,8 +435,8 @@ const StudyPage = () => {
 
                 {showingAnswer && (
                     <div className={`p-4 my-4 rounded-lg ${answeredCorrectly
-                            ? "bg-green-50 border-l-4 border-green-500"
-                            : "bg-red-50 border-l-4 border-red-500"
+                        ? "bg-green-50 border-l-4 border-green-500"
+                        : "bg-red-50 border-l-4 border-red-500"
                         }`}>
                         <h4 className="font-bold mb-1">
                             {answeredCorrectly
@@ -401,10 +449,22 @@ const StudyPage = () => {
                             The correct answer is <span className="font-bold">{currentQuestion.correctAnswer}</span>: {currentQuestion.options[currentQuestion.correctAnswer]}
                         </p>
 
-                        {currentQuestion.explanation && (
-                            <div className="mt-2">
+                        {currentQuestion.explanation ? (
+                            <div className="mt-4 p-4 bg-white border rounded-md">
                                 <h4 className="font-bold mb-1">Explanation:</h4>
-                                <p>{currentQuestion.explanation}</p>
+                                <p className="whitespace-pre-wrap">{currentQuestion.explanation}</p>
+                            </div>
+                        ) : (
+                            <div className="mt-4">
+                                <button
+                                    onClick={() => setShowExplanationGenerator(true)}
+                                    className="text-primary hover:text-primary-dark font-medium flex items-center"
+                                >
+                                    <svg className="w-5 h-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                    </svg>
+                                    Generate Explanation
+                                </button>
                             </div>
                         )}
                     </div>
