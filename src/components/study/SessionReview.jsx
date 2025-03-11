@@ -108,10 +108,10 @@ const SessionReview = ({ sessionQuestions, onStartNewSession }) => {
                 </div>
 
                 <div className={`p-4 my-4 rounded-lg ${isCorrect
-                        ? "bg-green-50 border-l-4 border-green-500"
-                        : userAnswer
-                            ? "bg-red-50 border-l-4 border-red-500"
-                            : "bg-blue-50 border-l-4 border-blue-500"
+                    ? "bg-green-50 border-l-4 border-green-500"
+                    : userAnswer
+                        ? "bg-red-50 border-l-4 border-red-500"
+                        : "bg-blue-50 border-l-4 border-blue-500"
                     }`}>
                     <h4 className="font-bold mb-1">
                         {isCorrect
@@ -148,6 +148,7 @@ const SessionReview = ({ sessionQuestions, onStartNewSession }) => {
                     question={question}
                     isVisible={true}
                 />
+            </div>
 
             <div className="flex justify-between mt-6">
                 <button

@@ -418,6 +418,7 @@ const StudyPage = () => {
                         isVisible={showingAnswer}
                     />
                 )}
+            </div>
 
             <div className="mt-6 flex justify-between">
                 <button
