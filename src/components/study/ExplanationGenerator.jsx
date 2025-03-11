@@ -26,6 +26,7 @@ const ExplanationGenerator = ({ question, onSave, onCancel }) => {
     }, [question, explanation]);
 
     // Generate explanation using the dedicated explanation service
+    // In your ExplanationGenerator.jsx component
     const generateExplanation = async () => {
         if (!question) return;
 
@@ -44,25 +45,32 @@ const ExplanationGenerator = ({ question, onSave, onCancel }) => {
                 }
             }, TIMEOUT_DURATION);
 
-            // Call the dedicated explanation service
-            const response = await explanationService.generateExplanation(question);
+            // Use the existing claude API directly
+            const response = await api.post('/claude', {
+                text: `Provide a detailed explanation for this PRITE question: ${question.text}`,
+                format: 'text',
+                customPrompt: `You are a medical educator explaining a PRITE question.
+      The correct answer is ${question.correctAnswer} (${question.options[question.correctAnswer]}).
+      Explain in detail why this answer is correct and why each other option is incorrect.
+      DO NOT reformat or extract the question - ONLY provide an educational explanation.`
+            });
 
             // Clear timeout as response received
             clearTimeout(timeoutId);
 
-            if (response.success) {
-                setExplanation(response.data);
+            if (response.data && response.data.success) {
+                setExplanation(response.data.data);
                 setIsEditing(true);
 
                 // Save to localStorage as backup
                 try {
-                    localStorage.setItem(`explanation_${question._id}`, response.data);
+                    localStorage.setItem(`explanation_${question._id}`, response.data.data);
                 } catch (storageError) {
                     // Ignore localStorage errors
                     console.error('Error saving to localStorage:', storageError);
                 }
             } else {
-                throw new Error(response.error || 'Failed to generate explanation');
+                throw new Error(response.data?.error || 'Failed to generate explanation');
             }
         } catch (error) {
             console.error('Error generating explanation:', error);
