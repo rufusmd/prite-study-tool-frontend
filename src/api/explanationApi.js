@@ -18,6 +18,28 @@ const explanationApi = {
                 error: error.response?.data?.error || 'Failed to generate explanation'
             };
         }
+    },
+
+    // Save a generated explanation
+    saveExplanation: async (questionId, explanation) => {
+        try {
+            const response = await api.post('/explanation/save', {
+                questionId,
+                explanation
+            });
+
+            return {
+                success: true,
+                message: response.data.message,
+                question: response.data.question
+            };
+        } catch (error) {
+            console.error('Save explanation error:', error);
+            return {
+                success: false,
+                error: error.response?.data?.error || 'Failed to save explanation'
+            };
+        }
     }
 };
 
