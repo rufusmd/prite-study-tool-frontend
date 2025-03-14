@@ -30,7 +30,7 @@ const authApi = {
                 error: error.response?.data?.message || 'Registration failed'
             };
         }
-    },
+    },  // Missing comma here
 
     // Login user with enhanced error logging
     login: async (credentials) => {
