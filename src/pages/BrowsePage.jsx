@@ -4,8 +4,18 @@ import { QuestionContext } from '../contexts/QuestionContext';
 import { AuthContext } from '../contexts/AuthContext';
 import { questionApi } from '../api';
 import Alert from '../components/common/Alert';
-import LoadingSpinner from '../../common/LoadingSpinner';
-import QuestionEditModal from '../../components/browse/QuestionEditModal';
+// Inline loading spinner component
+const LoadingSpinner = ({ size = 'medium' }) => {
+    const sizeClasses = {
+        small: 'h-4 w-4 border-2',
+        medium: 'h-8 w-8 border-2',
+        large: 'h-12 w-12 border-3'
+    };
+    return (
+        <div className={`animate-spin rounded-full border-solid border-primary border-t-transparent ${sizeClasses[size]}`}></div>
+    );
+};
+import QuestionEditModal from '../components/browse/QuestionEditModal';
 
 const BrowsePage = () => {
     const { user } = useContext(AuthContext);
