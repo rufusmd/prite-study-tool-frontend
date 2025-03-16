@@ -1,14 +1,15 @@
 // src/pages/BrowsePage.jsx
 import { useState, useEffect, useContext } from 'react';
 import { QuestionContext } from '../contexts/QuestionContext';
+import { AuthContext } from '../contexts/AuthContext';
 import { questionApi } from '../api';
 import Alert from '../components/common/Alert';
-import LoadingSpinner from '../components/common/LoadingSpinner';
-import CategorySelector from '../components/common/CategorySelector';
-import { PRITE_CATEGORIES } from '../constants/categories';
+import LoadingSpinner from '../common/LoadingSpinner';
+import QuestionEditModal from '../components/browse/QuestionEditModal';
 
 const BrowsePage = () => {
-    const { questions, dueQuestions, loading } = useContext(QuestionContext);
+    const { user } = useContext(AuthContext);
+    const { questions, dueQuestions, loading, loadQuestions } = useContext(QuestionContext);
     const [filteredQuestions, setFilteredQuestions] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [filters, setFilters] = useState({
@@ -18,17 +19,15 @@ const BrowsePage = () => {
     });
     const [alert, setAlert] = useState(null);
     const [isSearching, setIsSearching] = useState(false);
+    const [editQuestion, setEditQuestion] = useState(null);
 
     // Set filtered questions on component mount
     useEffect(() => {
         setFilteredQuestions(questions);
     }, [questions]);
 
-    // Get unique categories from questions (including the predefined ones)
-    const usedCategories = [...new Set(questions.filter(q => q.category).map(q => q.category))];
-
-    // Combine predefined categories with any custom ones from the data
-    const allCategories = [...new Set([...PRITE_CATEGORIES, ...usedCategories])];
+    // Get unique categories from questions
+    const categories = [...new Set(questions.filter(q => q.category).map(q => q.category))];
 
     // Handle search
     const handleSearch = async () => {
@@ -68,6 +67,32 @@ const BrowsePage = () => {
         }));
     };
 
+    // Handle edit question click
+    const handleEditQuestion = (question) => {
+        setEditQuestion(question);
+    };
+
+    // Handle update question after edit
+    const handleQuestionUpdate = (updatedQuestion) => {
+        // Update the question in the filtered questions list
+        setFilteredQuestions(prev =>
+            prev.map(q => q._id === updatedQuestion._id ? updatedQuestion : q)
+        );
+
+        // Refresh all questions to ensure consistency
+        loadQuestions();
+
+        setAlert({
+            type: 'success',
+            message: 'Question updated successfully'
+        });
+    };
+
+    // Determine if user can edit the question
+    const canEditQuestion = (question) => {
+        return user && question.creator === user.id;
+    };
+
     if (loading && !isSearching) {
         return (
             <div className="flex justify-center items-center h-64">
@@ -77,7 +102,7 @@ const BrowsePage = () => {
     }
 
     return (
-        <div>
+        <div className="pb-20">
             <h2 className="text-2xl font-bold mb-6">Browse Questions</h2>
 
             {alert && (
@@ -96,17 +121,17 @@ const BrowsePage = () => {
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Search questions..."
-                        className="input"
+                        className="input w-full"
                     />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <div>
                         <label className="block text-sm font-medium mb-1">Part</label>
                         <select
                             value={filters.part}
                             onChange={(e) => updateFilter('part', e.target.value)}
-                            className="input"
+                            className="input w-full"
                         >
                             <option value="">All Parts</option>
                             <option value="1">Part 1</option>
@@ -116,11 +141,31 @@ const BrowsePage = () => {
 
                     <div>
                         <label className="block text-sm font-medium mb-1">Category</label>
-                        <CategorySelector
-                            selectedCategory={filters.category}
-                            onChange={(value) => updateFilter('category', value)}
-                            showEmptyOption={true}
-                        />
+                        <select
+                            value={filters.category}
+                            onChange={(e) => updateFilter('category', e.target.value)}
+                            className="input w-full"
+                        >
+                            <option value="">All Categories</option>
+                            {categories.map((category) => (
+                                <option key={category} value={category}>
+                                    {category}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Visibility</label>
+                        <select
+                            value={filters.visibility}
+                            onChange={(e) => updateFilter('visibility', e.target.value)}
+                            className="input w-full"
+                        >
+                            <option value="all">All Questions</option>
+                            <option value="mine">My Questions</option>
+                            <option value="public">Public Questions</option>
+                        </select>
                     </div>
                 </div>
 
@@ -137,39 +182,54 @@ const BrowsePage = () => {
                 <h3 className="text-lg font-semibold">Results ({filteredQuestions.length})</h3>
             </div>
 
-            <div className="space-y-4 pb-16">
+            <div className="space-y-4">
                 {filteredQuestions.length === 0 ? (
                     <p className="text-center text-gray-500 py-8">No questions found</p>
                 ) : (
                     filteredQuestions.map((question) => {
                         const isDue = dueQuestions.some(q => q._id === question._id);
+                        const isEditable = canEditQuestion(question);
 
                         return (
                             <div
                                 key={question._id}
                                 className={`card ${isDue ? 'border-l-4 border-l-warning' : ''}`}
                             >
-                                <div className="flex flex-wrap gap-2 mb-2">
-                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                                        Part {question.part}
-                                    </span>
-
-                                    {question.category && (
-                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-success/10 text-success">
-                                            {question.category}
+                                <div className="flex justify-between items-start mb-2">
+                                    <div className="flex flex-wrap gap-2">
+                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                                            Part {question.part}
                                         </span>
-                                    )}
 
-                                    {question.isPublic && (
-                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-warning/10 text-warning">
-                                            Public
-                                        </span>
-                                    )}
+                                        {question.category && (
+                                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-success/10 text-success">
+                                                {question.category}
+                                            </span>
+                                        )}
 
-                                    {isDue && (
-                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-danger/10 text-danger">
-                                            Due
-                                        </span>
+                                        {question.isPublic && (
+                                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-warning/10 text-warning">
+                                                Public
+                                            </span>
+                                        )}
+
+                                        {isDue && (
+                                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-danger/10 text-danger">
+                                                Due
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {isEditable && (
+                                        <button
+                                            onClick={() => handleEditQuestion(question)}
+                                            className="text-primary hover:text-primary-dark"
+                                            title="Edit Question"
+                                        >
+                                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                        </button>
                                     )}
                                 </div>
 
@@ -202,6 +262,15 @@ const BrowsePage = () => {
                     })
                 )}
             </div>
+
+            {/* Question Edit Modal */}
+            {editQuestion && (
+                <QuestionEditModal
+                    question={editQuestion}
+                    onClose={() => setEditQuestion(null)}
+                    onUpdate={handleQuestionUpdate}
+                />
+            )}
         </div>
     );
 };

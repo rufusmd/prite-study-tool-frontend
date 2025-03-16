@@ -1,14 +1,46 @@
 // src/constants/categories.js
-// Create a separate file for these constants so they can be imported anywhere
+
 export const PRITE_CATEGORIES = [
-    "Development & Maturation",
-    "Behavioral & Social Sciences",
+    "Neuroscience",
+    "Development",
+    "Psychopathology",
+    "Psychotherapy",
+    "Somatic Treatments",
     "Epidemiology",
-    "Diagnostic Procedures",
-    "Psychopathology & Associated Conditions",
-    "Treatment across the Lifespan",
-    "Consultation/Collaborative Integrated Care",
-    "Issues in Practice",
-    "Research & Scholarship Literacy",
-    "Administration and Systems"
+    "Genetics",
+    "Ethics",
+    "Practice Management",
+    "Substance Use Disorders",
+    "Schizophrenia Spectrum",
+    "Bipolar Disorders",
+    "Depressive Disorders",
+    "Anxiety Disorders",
+    "Obsessive-Compulsive Disorders",
+    "Trauma-Related Disorders",
+    "Eating Disorders",
+    "Sleep-Wake Disorders",
+    "Sexual Dysfunctions",
+    "Gender Dysphoria",
+    "Personality Disorders",
+    "Neurocognitive Disorders",
+    "Child Psychiatry",
+    "Geriatric Psychiatry",
+    "Consultation-Liaison",
+    "Emergency Psychiatry",
+    "Forensic Psychiatry",
+    "Community Psychiatry",
+    "Cultural Psychiatry",
+    "Research Methods",
+    "Psychopharmacology",
+    "Neurodevelopmental Disorders",
+    "Disruptive Disorders",
+    "Other"
 ];
+
+// Function to get categories for dropdown menus
+export const getCategoryOptions = () => {
+    return PRITE_CATEGORIES.map(category => ({
+        value: category,
+        label: category
+    }));
+};

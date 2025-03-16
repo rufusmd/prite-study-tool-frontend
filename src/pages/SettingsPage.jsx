@@ -1,5 +1,5 @@
 // src/pages/SettingsPage.jsx
-import { useState, useContext, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 import { QuestionContext } from '../contexts/QuestionContext';
@@ -20,17 +20,17 @@ const SettingsPage = () => {
         institution: '',
         displayName: ''
     });
-    const [preferences, setPreferences] = useState({
-        nightMode: false,
-        showExplanations: true,
-        questionsPerSession: 20,
-        notificationsEnabled: true
+
+    const [settings, setSettings] = useState({
+        shareUsageData: false,
+        publicProfile: false
     });
+
     const [loading, setLoading] = useState(false);
     const [alert, setAlert] = useState(null);
     const navigate = useNavigate();
 
-    // Load user profile and preferences
+    // Load user profile and settings
     useEffect(() => {
         if (user) {
             setProfile({
@@ -42,28 +42,13 @@ const SettingsPage = () => {
                 displayName: user.displayName || ''
             });
 
-            // Load preferences from localStorage
-            const savedPreferences = localStorage.getItem('userPreferences');
-            if (savedPreferences) {
-                try {
-                    setPreferences(JSON.parse(savedPreferences));
-                } catch (error) {
-                    console.error('Error parsing saved preferences:', error);
-                }
-            }
+            // Load settings
+            setSettings({
+                shareUsageData: user.settings?.shareUsageData || false,
+                publicProfile: user.settings?.publicProfile || false
+            });
         }
     }, [user]);
-
-    // Save preferences to localStorage
-    const savePreferences = () => {
-        try {
-            localStorage.setItem('userPreferences', JSON.stringify(preferences));
-            return true;
-        } catch (error) {
-            console.error('Error saving preferences:', error);
-            return false;
-        }
-    };
 
     // Handle profile update
     const handleProfileUpdate = async () => {
@@ -97,40 +82,217 @@ const SettingsPage = () => {
         }
     };
 
-    // Handle preferences update
-    const handlePreferencesUpdate = () => {
-        if (savePreferences()) {
-            setAlert({
-                type: 'success',
-                message: 'Preferences saved successfully'
+    // Handle toggle switch changes
+    const handleToggle = async (setting) => {
+        try {
+            setLoading(true);
+
+            // Update the setting state
+            const newSettings = {
+                ...settings,
+                [setting]: !settings[setting]
+            };
+
+            setSettings(newSettings);
+
+            // Make an API call to update the user settings
+            const response = await api.put('/users/settings', {
+                settings: newSettings
             });
-        } else {
+
+            if (response.data && response.data.success) {
+                setAlert({
+                    type: 'success',
+                    message: 'Settings updated successfully'
+                });
+
+                // Update the user context
+                if (updateUserProfile && response.data.user) {
+                    updateUserProfile(response.data.user);
+                }
+            } else {
+                // Revert the state if API call fails
+                setSettings(settings);
+                throw new Error(response.data?.message || 'Failed to update settings');
+            }
+        } catch (error) {
+            console.error('Settings update error:', error);
             setAlert({
                 type: 'error',
-                message: 'Failed to save preferences'
+                message: error.message || 'Failed to update settings'
             });
+            // Revert the state if API call fails
+            setSettings(settings);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Handle export study data
+    const handleExportStudyData = async () => {
+        try {
+            setLoading(true);
+            setAlert({
+                type: 'info',
+                message: 'Preparing your study data for export...'
+            });
+
+            const response = await api.get('/users/export/study-data');
+
+            if (response.data && response.data.success) {
+                // Create a downloadable blob
+                const blob = new Blob([JSON.stringify(response.data.data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+
+                // Create a link and trigger download
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `prite_study_data_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+
+                setAlert({
+                    type: 'success',
+                    message: 'Study data exported successfully'
+                });
+            } else {
+                throw new Error(response.data?.message || 'Failed to export study data');
+            }
+        } catch (error) {
+            console.error('Export error:', error);
+            setAlert({
+                type: 'error',
+                message: error.message || 'Failed to export study data'
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Handle export my questions
+    const handleExportQuestions = async () => {
+        try {
+            setLoading(true);
+            setAlert({
+                type: 'info',
+                message: 'Preparing your questions for export...'
+            });
+
+            const response = await api.get('/users/export/questions');
+
+            if (response.data && response.data.success) {
+                // Create a downloadable blob
+                const blob = new Blob([JSON.stringify(response.data.questions, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+
+                // Create a link and trigger download
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `prite_questions_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+
+                setAlert({
+                    type: 'success',
+                    message: 'Questions exported successfully'
+                });
+            } else {
+                throw new Error(response.data?.message || 'Failed to export questions');
+            }
+        } catch (error) {
+            console.error('Export error:', error);
+            setAlert({
+                type: 'error',
+                message: error.message || 'Failed to export questions'
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Handle reset study progress
+    const handleResetProgress = async () => {
+        if (!window.confirm('Are you sure you want to reset all your study progress? This cannot be undone.')) {
+            return;
+        }
+
+        try {
+            setLoading(true);
+
+            const response = await api.post('/users/reset-study-progress');
+
+            if (response.data && response.data.success) {
+                setAlert({
+                    type: 'success',
+                    message: 'Study progress reset successfully'
+                });
+
+                // Refresh the page after a delay to update the UI
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            } else {
+                throw new Error(response.data?.message || 'Failed to reset study progress');
+            }
+        } catch (error) {
+            console.error('Reset progress error:', error);
+            setAlert({
+                type: 'error',
+                message: error.message || 'Failed to reset study progress'
+            });
+        } finally {
+            setLoading(false);
         }
     };
 
     // Handle logout
     const handleLogout = () => {
         logout();
-        clearLocalData();
         navigate('/login');
+    };
+
+    // Handle account deletion
+    const handleDeleteAccount = async () => {
+        if (!window.confirm('Are you sure you want to delete your account? This cannot be undone and all your data will be permanently removed.')) {
+            return;
+        }
+
+        try {
+            setLoading(true);
+
+            const response = await api.delete('/users/account');
+
+            if (response.data && response.data.success) {
+                setAlert({
+                    type: 'success',
+                    message: 'Account deleted successfully'
+                });
+
+                // Logout and redirect to login page after a delay
+                setTimeout(() => {
+                    logout();
+                    navigate('/login');
+                }, 1500);
+            } else {
+                throw new Error(response.data?.message || 'Failed to delete account');
+            }
+        } catch (error) {
+            console.error('Delete account error:', error);
+            setAlert({
+                type: 'error',
+                message: error.message || 'Failed to delete account'
+            });
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Handle profile field changes
     const handleProfileChange = (e) => {
         const { name, value } = e.target;
         setProfile(prev => ({
-            ...prev,
-            [name]: value
-        }));
-    };
-
-    // Handle preference changes
-    const handlePreferenceChange = (name, value) => {
-        setPreferences(prev => ({
             ...prev,
             [name]: value
         }));
@@ -163,13 +325,23 @@ const SettingsPage = () => {
                     </button>
 
                     <button
-                        onClick={() => setActiveTab('preferences')}
-                        className={`px-4 py-2 font-medium ${activeTab === 'preferences'
+                        onClick={() => setActiveTab('data')}
+                        className={`px-4 py-2 font-medium ${activeTab === 'data'
                                 ? 'text-primary border-b-2 border-primary'
                                 : 'text-gray-500 hover:text-gray-700'
                             }`}
                     >
-                        Preferences
+                        Data Management
+                    </button>
+
+                    <button
+                        onClick={() => setActiveTab('privacy')}
+                        className={`px-4 py-2 font-medium ${activeTab === 'privacy'
+                                ? 'text-primary border-b-2 border-primary'
+                                : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                    >
+                        Privacy
                     </button>
 
                     <button
@@ -305,232 +477,158 @@ const SettingsPage = () => {
                 </div>
             )}
 
-            {/* Preferences Tab */}
-            {activeTab === 'preferences' && (
-                <div className="card p-4">
-                    <h3 className="text-lg font-bold mb-4">App Preferences</h3>
+            {/* Data Management Tab */}
+            {activeTab === 'data' && (
+                <div>
+                    <h3 className="text-lg font-bold mb-4">Data Management</h3>
+                    <p className="text-gray-600 mb-4">Manage your study data and question contributions.</p>
 
                     <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium">Dark Mode</label>
-                            <div className="relative inline-block w-12 align-middle select-none">
-                                <input
-                                    type="checkbox"
-                                    name="nightMode"
-                                    id="nightMode"
-                                    checked={preferences.nightMode}
-                                    onChange={(e) => handlePreferenceChange('nightMode', e.target.checked)}
-                                    className="absolute block w-6 h-6 bg-white border-4 rounded-full appearance-none cursor-pointer"
-                                    style={{
-                                        top: '0',
-                                        left: preferences.nightMode ? '50%' : '0',
-                                        transition: 'left 0.2s ease-in-out'
-                                    }}
-                                />
-                                <label
-                                    htmlFor="nightMode"
-                                    className={`block h-6 overflow-hidden rounded-full cursor-pointer ${preferences.nightMode ? 'bg-primary' : 'bg-gray-300'
-                                        }`}
-                                ></label>
+                        <button
+                            onClick={handleExportStudyData}
+                            className="w-full flex items-center justify-between p-4 border rounded-md hover:bg-gray-50"
+                            disabled={loading}
+                        >
+                            <div className="flex items-center">
+                                <svg className="h-5 w-5 mr-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                Export Study Data
                             </div>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium">Show Explanations After Answer</label>
-                            <div className="relative inline-block w-12 align-middle select-none">
-                                <input
-                                    type="checkbox"
-                                    name="showExplanations"
-                                    id="showExplanations"
-                                    checked={preferences.showExplanations}
-                                    onChange={(e) => handlePreferenceChange('showExplanations', e.target.checked)}
-                                    className="absolute block w-6 h-6 bg-white border-4 rounded-full appearance-none cursor-pointer"
-                                    style={{
-                                        top: '0',
-                                        left: preferences.showExplanations ? '50%' : '0',
-                                        transition: 'left 0.2s ease-in-out'
-                                    }}
-                                />
-                                <label
-                                    htmlFor="showExplanations"
-                                    className={`block h-6 overflow-hidden rounded-full cursor-pointer ${preferences.showExplanations ? 'bg-primary' : 'bg-gray-300'
-                                        }`}
-                                ></label>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium">Enable Notifications</label>
-                            <div className="relative inline-block w-12 align-middle select-none">
-                                <input
-                                    type="checkbox"
-                                    name="notificationsEnabled"
-                                    id="notificationsEnabled"
-                                    checked={preferences.notificationsEnabled}
-                                    onChange={(e) => handlePreferenceChange('notificationsEnabled', e.target.checked)}
-                                    className="absolute block w-6 h-6 bg-white border-4 rounded-full appearance-none cursor-pointer"
-                                    style={{
-                                        top: '0',
-                                        left: preferences.notificationsEnabled ? '50%' : '0',
-                                        transition: 'left 0.2s ease-in-out'
-                                    }}
-                                />
-                                <label
-                                    htmlFor="notificationsEnabled"
-                                    className={`block h-6 overflow-hidden rounded-full cursor-pointer ${preferences.notificationsEnabled ? 'bg-primary' : 'bg-gray-300'
-                                        }`}
-                                ></label>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Questions Per Study Session</label>
-                            <select
-                                value={preferences.questionsPerSession}
-                                onChange={(e) => handlePreferenceChange('questionsPerSession', parseInt(e.target.value))}
-                                className="w-full p-2 border rounded-md"
-                            >
-                                <option value={10}>10 questions</option>
-                                <option value={20}>20 questions</option>
-                                <option value={30}>30 questions</option>
-                                <option value={50}>50 questions</option>
-                                <option value={100}>100 questions</option>
-                            </select>
-                        </div>
+                            <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                        </button>
 
                         <button
-                            onClick={handlePreferencesUpdate}
-                            className="w-full p-2 bg-primary text-white rounded-md"
+                            onClick={handleExportQuestions}
+                            className="w-full flex items-center justify-between p-4 border rounded-md hover:bg-gray-50"
+                            disabled={loading}
                         >
-                            Save Preferences
+                            <div className="flex items-center">
+                                <svg className="h-5 w-5 mr-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                Export My Questions
+                            </div>
+                            <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
                         </button>
+
+                        <button
+                            onClick={handleResetProgress}
+                            className="w-full flex items-center justify-between p-4 border rounded-md text-red-600 hover:bg-red-50"
+                            disabled={loading}
+                        >
+                            <div className="flex items-center">
+                                <svg className="h-5 w-5 mr-2 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Reset Study Progress
+                            </div>
+                            <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Privacy Tab */}
+            {activeTab === 'privacy' && (
+                <div>
+                    <h3 className="text-lg font-bold mb-4">Privacy Settings</h3>
+
+                    <div className="space-y-6">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h4 className="font-medium">Share Anonymous Usage Data</h4>
+                                <p className="text-sm text-gray-600">
+                                    Help improve the app by sharing anonymous usage statistics
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => handleToggle('shareUsageData')}
+                                className={`relative inline-flex items-center w-11 h-6 rounded-full transition-colors ${settings.shareUsageData ? 'bg-primary' : 'bg-gray-300'}`}
+                                disabled={loading}
+                            >
+                                <span
+                                    className={`inline-block w-4 h-4 transform transition-transform bg-white rounded-full ${settings.shareUsageData ? 'translate-x-6' : 'translate-x-1'
+                                        }`}
+                                />
+                            </button>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h4 className="font-medium">Public Profile</h4>
+                                <p className="text-sm text-gray-600">
+                                    Make your contributions visible to other users
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => handleToggle('publicProfile')}
+                                className={`relative inline-flex items-center w-11 h-6 rounded-full transition-colors ${settings.publicProfile ? 'bg-primary' : 'bg-gray-300'}`}
+                                disabled={loading}
+                            >
+                                <span
+                                    className={`inline-block w-4 h-4 transform transition-transform bg-white rounded-full ${settings.publicProfile ? 'translate-x-6' : 'translate-x-1'
+                                        }`}
+                                />
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="mt-8 p-4 bg-blue-50 rounded-lg">
+                        <h4 className="font-medium text-blue-800 mb-2">About Your Data</h4>
+                        <p className="text-sm text-blue-700">
+                            We respect your privacy and use your data only to provide and improve the PRITE Study Tool.
+                            Your study data is never shared with third parties. Anonymous usage statistics help us
+                            understand how the app is used and improve it for everyone.
+                        </p>
                     </div>
                 </div>
             )}
 
             {/* PRITE Scores Tab */}
             {activeTab === 'prite-scores' && (
-                <div className="card p-4">
-                    <PriteScoreHistory />
-                </div>
+                <PriteScoreHistory />
             )}
 
             {/* Account Tab */}
             {activeTab === 'account' && (
-                <div className="card p-4">
-                    <h3 className="text-lg font-bold mb-4">Account Settings</h3>
+                <div>
+                    <h3 className="text-lg font-bold mb-4">Account Actions</h3>
 
-                    <div className="space-y-6">
-                        <div>
-                            <h4 className="font-medium mb-2">Data Management</h4>
-                            <div className="p-4 bg-gray-50 rounded-lg">
-                                <p className="text-sm text-gray-600 mb-4">
-                                    Manage your study data and question contributions.
-                                </p>
+                    <div className="space-y-4">
+                        <button
+                            onClick={handleLogout}
+                            className="w-full flex items-center justify-center p-4 bg-gray-200 rounded-md hover:bg-gray-300"
+                        >
+                            <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
+                            Log Out
+                        </button>
 
-                                <div className="space-y-2">
-                                    <button className="w-full p-2 border border-gray-300 rounded-md text-left flex items-center hover:bg-gray-100">
-                                        <svg className="h-5 w-5 text-gray-500 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                                            <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" />
-                                        </svg>
-                                        Export Study Data
-                                    </button>
+                        <button
+                            onClick={handleDeleteAccount}
+                            className="w-full flex items-center justify-center p-4 bg-red-100 text-red-700 rounded-md hover:bg-red-200"
+                        >
+                            <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Delete Account
+                        </button>
+                    </div>
 
-                                    <button className="w-full p-2 border border-gray-300 rounded-md text-left flex items-center hover:bg-gray-100">
-                                        <svg className="h-5 w-5 text-gray-500 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                                            <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" />
-                                        </svg>
-                                        Export My Questions
-                                    </button>
-
-                                    <button className="w-full p-2 border border-gray-300 rounded-md text-left flex items-center hover:bg-gray-100">
-                                        <svg className="h-5 w-5 text-red-500 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                                        </svg>
-                                        Reset Study Progress
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <h4 className="font-medium mb-2">Privacy</h4>
-                            <div className="p-4 bg-gray-50 rounded-lg">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div>
-                                        <p className="font-medium">Share Anonymous Usage Data</p>
-                                        <p className="text-xs text-gray-500">
-                                            Help improve the app by sharing anonymous usage statistics
-                                        </p>
-                                    </div>
-                                    <div className="relative inline-block w-12 align-middle select-none">
-                                        <input
-                                            type="checkbox"
-                                            id="shareData"
-                                            checked={true}
-                                            className="absolute block w-6 h-6 bg-white border-4 rounded-full appearance-none cursor-pointer"
-                                            style={{
-                                                top: '0',
-                                                left: '50%',
-                                                transition: 'left 0.2s ease-in-out'
-                                            }}
-                                        />
-                                        <label
-                                            htmlFor="shareData"
-                                            className="block h-6 overflow-hidden rounded-full cursor-pointer bg-primary"
-                                        ></label>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="font-medium">Public Profile</p>
-                                        <p className="text-xs text-gray-500">
-                                            Make your contributions visible to other users
-                                        </p>
-                                    </div>
-                                    <div className="relative inline-block w-12 align-middle select-none">
-                                        <input
-                                            type="checkbox"
-                                            id="publicProfile"
-                                            checked={false}
-                                            className="absolute block w-6 h-6 bg-white border-4 rounded-full appearance-none cursor-pointer"
-                                            style={{
-                                                top: '0',
-                                                left: '0',
-                                                transition: 'left 0.2s ease-in-out'
-                                            }}
-                                        />
-                                        <label
-                                            htmlFor="publicProfile"
-                                            className="block h-6 overflow-hidden rounded-full cursor-pointer bg-gray-300"
-                                        ></label>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <h4 className="font-medium mb-2">Account Actions</h4>
-                            <div className="space-y-2">
-                                <button
-                                    onClick={handleLogout}
-                                    className="w-full p-2 bg-gray-200 hover:bg-gray-300 rounded-md text-gray-800 flex items-center justify-center"
-                                >
-                                    <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                                    </svg>
-                                    Log Out
-                                </button>
-
-                                <button className="w-full p-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-md flex items-center justify-center">
-                                    <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                    Delete Account
-                                </button>
-                            </div>
-                        </div>
+                    <div className="mt-6 p-4 bg-red-50 rounded-lg">
+                        <h4 className="font-medium text-red-800 mb-2">Warning</h4>
+                        <p className="text-sm text-red-700">
+                            Deleting your account is permanent and cannot be undone. All your data,
+                            including questions, study progress, and settings will be permanently removed.
+                        </p>
                     </div>
                 </div>
             )}
