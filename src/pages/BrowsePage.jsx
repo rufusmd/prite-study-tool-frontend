@@ -4,8 +4,8 @@ import { QuestionContext } from '../contexts/QuestionContext';
 import { AuthContext } from '../contexts/AuthContext';
 import { questionApi } from '../api';
 import Alert from '../components/common/Alert';
-import LoadingSpinner from '../common/LoadingSpinner';
-import QuestionEditModal from '../components/browse/QuestionEditModal';
+import LoadingSpinner from '../../common/LoadingSpinner';
+import QuestionEditModal from '../../components/browse/QuestionEditModal';
 
 const BrowsePage = () => {
     const { user } = useContext(AuthContext);
