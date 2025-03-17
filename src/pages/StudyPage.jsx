@@ -27,6 +27,7 @@ const StudyPage = () => {
     const [alert, setAlert] = useState(null);
     const [showingAnswer, setShowingAnswer] = useState(false);
     const [selectedOption, setSelectedOption] = useState(null);
+    const [selectedOptions, setSelectedOptions] = useState([]); // For multiple correct questions
     const [sessionComplete, setSessionComplete] = useState(false);
     const [answeredCorrectly, setAnsweredCorrectly] = useState(null);
     const [showStats, setShowStats] = useState(false);
@@ -49,6 +50,9 @@ const StudyPage = () => {
     useEffect(() => {
         if (currentStudySession.length > 0 && !showingAnswer && !sessionComplete) {
             setTimeStarted(new Date());
+            // Reset selected options when showing a new question
+            setSelectedOption(null);
+            setSelectedOptions([]);
         }
     }, [currentQuestionIndex, currentStudySession, showingAnswer, sessionComplete]);
 
@@ -69,29 +73,48 @@ const StudyPage = () => {
         if (started) {
             setShowingAnswer(false);
             setSelectedOption(null);
+            setSelectedOptions([]);
             setAnsweredCorrectly(null);
             setTimeStarted(new Date());
         }
     };
 
     const handleShowAnswer = () => {
-        if (!selectedOption) return;
+        const currentQuestion = getCurrentQuestion();
+        if (!currentQuestion) return;
 
         // Calculate time spent on question
         const timeSpent = new Date() - timeStarted;
 
-        // Check if answer is correct
-        const currentQuestion = getCurrentQuestion();
-        if (currentQuestion && selectedOption) {
+        // Check if answer is correct based on question type
+        if (currentQuestion.questionType === 'multipleCorrect') {
+            if (selectedOptions.length === 0) return; // Require at least one selection
+
+            // For multiple correct questions, compare arrays
+            const correctAnswers = currentQuestion.correctAnswers || [];
+
+            // Sort both arrays to ensure consistent comparison
+            const sortedSelected = [...selectedOptions].sort();
+            const sortedCorrect = [...correctAnswers].sort();
+
+            // Check if both arrays have the same content
+            const isCorrect = sortedSelected.length === sortedCorrect.length &&
+                sortedSelected.every((value, index) => value === sortedCorrect[index]);
+
+            setAnsweredCorrectly(isCorrect);
+        } else {
+            // For standard and fourOptions questions
+            if (!selectedOption) return;
+
             const isCorrect = selectedOption === currentQuestion.correctAnswer;
             setAnsweredCorrectly(isCorrect);
-
-            // Add to completed questions list for review
-            setCompletedQuestions(prev => [
-                ...prev,
-                currentQuestion
-            ]);
         }
+
+        // Add to completed questions list for review
+        setCompletedQuestions(prev => [
+            ...prev,
+            currentQuestion
+        ]);
 
         setShowingAnswer(true);
     };
@@ -101,6 +124,7 @@ const StudyPage = () => {
         if (hasNext) {
             setShowingAnswer(false);
             setSelectedOption(null);
+            setSelectedOptions([]);
             setAnsweredCorrectly(null);
             setTimeStarted(new Date());
         } else {
@@ -112,14 +136,46 @@ const StudyPage = () => {
     const handleDifficulty = async (difficulty) => {
         if (currentStudySession.length === 0) return;
 
-        const questionId = currentStudySession[currentQuestionIndex]._id;
-        await updateStudyData(questionId, difficulty, selectedOption);
+        const currentQuestion = getCurrentQuestion();
+        if (!currentQuestion) return;
+
+        const questionId = currentQuestion._id;
+
+        // For multiple correct questions, update with all selected options
+        if (currentQuestion.questionType === 'multipleCorrect') {
+            await updateStudyData(questionId, difficulty, selectedOptions);
+        } else {
+            await updateStudyData(questionId, difficulty, selectedOption);
+        }
+
         handleNextQuestion();
     };
 
     const handleSelectOption = (option) => {
         if (showingAnswer) return;
-        setSelectedOption(option);
+
+        const currentQuestion = getCurrentQuestion();
+        if (!currentQuestion) return;
+
+        if (currentQuestion.questionType === 'multipleCorrect') {
+            // For multiple correct questions, toggle the selection
+            setSelectedOptions(prev => {
+                if (prev.includes(option)) {
+                    return prev.filter(o => o !== option);
+                } else {
+                    // Check if we've reached the limit of selections
+                    const numCorrect = currentQuestion.numCorrectAnswers || 3;
+                    if (prev.length >= numCorrect) {
+                        return [...prev.slice(1), option]; // Remove oldest selection
+                    } else {
+                        return [...prev, option];
+                    }
+                }
+            });
+        } else {
+            // For standard questions, just set the selected option
+            setSelectedOption(option);
+        }
     };
 
     // Get current question
@@ -131,7 +187,81 @@ const StudyPage = () => {
         return currentStudySession[currentQuestionIndex];
     };
 
+    // Get option letters based on question type
+    const getOptionLetters = (question) => {
+        if (!question) return ['A', 'B', 'C', 'D', 'E'];
+
+        const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O'];
+
+        if (question.questionType === 'fourOptions') {
+            return letters.slice(0, 4); // A-D
+        } else if (question.questionType === 'multipleCorrect') {
+            // Return all letters that have options defined
+            return letters.filter(letter => question.options[letter]);
+        } else {
+            return letters.slice(0, 5); // A-E for standard questions
+        }
+    };
+
     const currentQuestion = getCurrentQuestion();
+
+    // Determine if we can show the answer button
+    const canShowAnswer = () => {
+        if (!currentQuestion) return false;
+
+        if (currentQuestion.questionType === 'multipleCorrect') {
+            // For multiple correct, we need at least the expected number of answers selected
+            const requiredSelections = currentQuestion.numCorrectAnswers || 3;
+            return selectedOptions.length === requiredSelections;
+        } else {
+            // For standard and fourOptions, we need a single selection
+            return !!selectedOption;
+        }
+    };
+
+    // Determine option class based on question type
+    const getOptionClass = (letter) => {
+        const baseClass = "p-3 border rounded-md cursor-pointer mb-2 transition-colors";
+
+        if (!currentQuestion) return baseClass;
+
+        // For multiple correct questions
+        if (currentQuestion.questionType === 'multipleCorrect') {
+            if (!showingAnswer && selectedOptions.includes(letter)) {
+                return `${baseClass} border-primary bg-primary/10`;
+            }
+
+            if (showingAnswer) {
+                const correctAnswers = currentQuestion.correctAnswers || [];
+                const isCorrect = correctAnswers.includes(letter);
+                const isSelected = selectedOptions.includes(letter);
+
+                if (isCorrect && isSelected) {
+                    return `${baseClass} border-success bg-success/10`; // Correctly selected
+                } else if (isCorrect && !isSelected) {
+                    return `${baseClass} border-success bg-success/5`; // Missed this correct answer
+                } else if (!isCorrect && isSelected) {
+                    return `${baseClass} border-danger bg-danger/10`; // Incorrectly selected
+                }
+            }
+        } else {
+            // For standard and fourOptions questions
+            if (!showingAnswer && selectedOption === letter) {
+                return `${baseClass} border-primary bg-primary/10`;
+            }
+
+            if (showingAnswer) {
+                if (letter === currentQuestion.correctAnswer) {
+                    return `${baseClass} border-success bg-success/10`;
+                }
+                if (selectedOption === letter && letter !== currentQuestion.correctAnswer) {
+                    return `${baseClass} border-danger bg-danger/10`;
+                }
+            }
+        }
+
+        return `${baseClass} border-gray-300 hover:bg-gray-50`;
+    };
 
     if (loading) {
         return (
@@ -298,26 +428,6 @@ const StudyPage = () => {
         );
     }
 
-    // Determine option class
-    const getOptionClass = (letter) => {
-        const baseClass = "p-3 border rounded-md cursor-pointer mb-2 transition-colors";
-
-        if (!showingAnswer && selectedOption === letter) {
-            return `${baseClass} border-primary bg-primary/10`;
-        }
-
-        if (showingAnswer) {
-            if (letter === currentQuestion.correctAnswer) {
-                return `${baseClass} border-success bg-success/10`;
-            }
-            if (selectedOption === letter && letter !== currentQuestion.correctAnswer) {
-                return `${baseClass} border-danger bg-danger/10`;
-            }
-        }
-
-        return `${baseClass} border-gray-300 hover:bg-gray-50`;
-    };
-
     return (
         <div className="pb-20">
             <div className="flex justify-between items-center mb-6">
@@ -372,15 +482,45 @@ const StudyPage = () => {
             <div className="card">
                 <p className="text-lg font-medium mb-6">{currentQuestion.text}</p>
 
+                {/* Display special instructions for special question types */}
+                {currentQuestion.questionType !== 'standard' && currentQuestion.instructions && (
+                    <div className="mb-4 p-3 bg-blue-50 border-l-4 border-blue-400 text-blue-800">
+                        <p className="font-medium">{currentQuestion.instructions}</p>
+                        {currentQuestion.questionType === 'multipleCorrect' && (
+                            <p className="text-sm mt-1">
+                                Selected: {selectedOptions.length}/{currentQuestion.numCorrectAnswers || 3}
+                            </p>
+                        )}
+                    </div>
+                )}
+
                 <div className="space-y-2 mb-6">
-                    {Object.entries(currentQuestion.options).map(([letter, text]) => (
-                        text && (
+                    {getOptionLetters(currentQuestion).map(letter => (
+                        currentQuestion.options[letter] && (
                             <div
                                 key={letter}
                                 className={getOptionClass(letter)}
                                 onClick={() => handleSelectOption(letter)}
                             >
-                                <span className="font-bold">{letter}:</span> {text}
+                                {currentQuestion.questionType === 'multipleCorrect' && !showingAnswer ? (
+                                    <div className="flex items-center">
+                                        <div className={`h-5 w-5 border rounded mr-2 flex items-center justify-center ${selectedOptions.includes(letter) ? 'bg-primary border-primary text-white' : 'border-gray-300'
+                                            }`}>
+                                            {selectedOptions.includes(letter) && (
+                                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <span className="font-bold">{letter}:</span> {currentQuestion.options[letter]}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <span className="font-bold">{letter}:</span> {currentQuestion.options[letter]}
+                                    </>
+                                )}
                             </div>
                         )
                     ))}
@@ -388,8 +528,8 @@ const StudyPage = () => {
 
                 {showingAnswer && (
                     <div className={`p-4 my-4 rounded-lg ${answeredCorrectly
-                            ? "bg-green-50 border-l-4 border-green-500"
-                            : "bg-red-50 border-l-4 border-red-500"
+                        ? "bg-green-50 border-l-4 border-green-500"
+                        : "bg-red-50 border-l-4 border-red-500"
                         }`}>
                         <h4 className="font-bold mb-1">
                             {answeredCorrectly
@@ -398,9 +538,36 @@ const StudyPage = () => {
                             }
                         </h4>
 
-                        <p className="mb-2">
-                            The correct answer is <span className="font-bold">{currentQuestion.correctAnswer}</span>: {currentQuestion.options[currentQuestion.correctAnswer]}
-                        </p>
+                        {/* For standard and fourOptions questions */}
+                        {(currentQuestion.questionType === 'standard' || currentQuestion.questionType === 'fourOptions') && (
+                            <p className="mb-2">
+                                {selectedOption ? (
+                                    <>
+                                        You selected <span className="font-bold">{selectedOption}</span>.
+                                        The correct answer is <span className="font-bold">{currentQuestion.correctAnswer}</span>: {currentQuestion.options[currentQuestion.correctAnswer]}
+                                    </>
+                                ) : (
+                                    <>
+                                        The correct answer is <span className="font-bold">{currentQuestion.correctAnswer}</span>: {currentQuestion.options[currentQuestion.correctAnswer]}
+                                    </>
+                                )}
+                            </p>
+                        )}
+
+                        {/* For multipleCorrect questions */}
+                        {currentQuestion.questionType === 'multipleCorrect' && (
+                            <div className="mb-2">
+                                <p>You selected: <span className="font-bold">{selectedOptions.join(', ')}</span></p>
+                                <p className="mt-1">The correct answers are:</p>
+                                <ul className="list-disc pl-5 mt-1 space-y-1">
+                                    {(currentQuestion.correctAnswers || []).map(letter => (
+                                        <li key={letter}>
+                                            <span className="font-bold">{letter}:</span> {currentQuestion.options[letter]}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
 
                         {currentQuestion.explanation && (
                             <div className="mt-2">
@@ -411,7 +578,7 @@ const StudyPage = () => {
                     </div>
                 )}
 
-                {/* Add the ExplanationGenerator component right after the existing explanation */}
+                {/* Add the ExplanationGenerator component right after */}
                 {showingAnswer && (
                     <ExplanationGenerator
                         question={currentQuestion}
@@ -432,9 +599,13 @@ const StudyPage = () => {
                     <button
                         onClick={handleShowAnswer}
                         className="btn btn-primary"
-                        disabled={!selectedOption}
+                        disabled={!canShowAnswer()}
                     >
-                        {!selectedOption ? 'Select an Answer' : 'Check Answer'}
+                        {!canShowAnswer()
+                            ? currentQuestion.questionType === 'multipleCorrect'
+                                ? `Select ${currentQuestion.numCorrectAnswers || 3} Answers`
+                                : 'Select an Answer'
+                            : 'Check Answer'}
                     </button>
                 ) : (
                     <button

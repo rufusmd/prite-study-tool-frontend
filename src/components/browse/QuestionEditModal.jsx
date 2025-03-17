@@ -1,5 +1,5 @@
 // src/components/browse/QuestionEditModal.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import LoadingSpinner from '../common/LoadingSpinner';
 import Alert from '../common/Alert';
 import api from '../../utils/api';
@@ -13,27 +13,91 @@ const QuestionEditModal = ({ question, onClose, onUpdate }) => {
             B: question.options?.B || '',
             C: question.options?.C || '',
             D: question.options?.D || '',
-            E: question.options?.E || ''
+            E: question.options?.E || '',
+            F: question.options?.F || '',
+            G: question.options?.G || '',
+            H: question.options?.H || '',
+            I: question.options?.I || '',
+            J: question.options?.J || '',
+            K: question.options?.K || '',
+            L: question.options?.L || '',
+            M: question.options?.M || '',
+            N: question.options?.N || '',
+            O: question.options?.O || ''
         },
         correctAnswer: question.correctAnswer || '',
+        correctAnswers: question.correctAnswers || [],
         explanation: question.explanation || '',
         category: question.category || '',
         part: question.part || '1',
         year: question.year || new Date().getFullYear().toString(),
         isPublic: question.isPublic || false,
-        number: question.number || ''
+        number: question.number || '',
+        questionType: question.questionType || 'standard',
+        instructions: question.instructions || '',
+        numCorrectAnswers: question.numCorrectAnswers || 1
     });
     const [loading, setLoading] = useState(false);
     const [alert, setAlert] = useState(null);
+    const [visibleOptions, setVisibleOptions] = useState(5); // Default to 5 options (A-E)
+
+    // Update visible options when question type changes
+    useEffect(() => {
+        if (formData.questionType === 'fourOptions') {
+            setVisibleOptions(4);
+        } else if (formData.questionType === 'multipleCorrect') {
+            setVisibleOptions(15); // Show all possible options for multiple correct
+        } else {
+            setVisibleOptions(5); // Standard questions show 5 options
+        }
+    }, [formData.questionType]);
 
     // Handle form changes
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
 
         if (type === 'checkbox') {
+            if (name === 'isPublic') {
+                setFormData(prev => ({
+                    ...prev,
+                    [name]: checked
+                }));
+            } else if (name.startsWith('correctAnswer_')) {
+                // Handle multiple correct answers checkboxes
+                const letter = name.split('_')[1];
+                const updatedCorrectAnswers = [...formData.correctAnswers];
+
+                if (checked) {
+                    if (!updatedCorrectAnswers.includes(letter)) {
+                        updatedCorrectAnswers.push(letter);
+                    }
+                } else {
+                    const index = updatedCorrectAnswers.indexOf(letter);
+                    if (index !== -1) {
+                        updatedCorrectAnswers.splice(index, 1);
+                    }
+                }
+
+                setFormData(prev => ({
+                    ...prev,
+                    correctAnswers: updatedCorrectAnswers
+                }));
+            }
+        } else if (name === 'questionType') {
+            // Set default instructions based on question type
+            let instructions = '';
+            if (value === 'multipleCorrect') {
+                instructions = 'Select the THREE correct answers.';
+            }
+
+            // Reset correctAnswer/correctAnswers based on question type
             setFormData(prev => ({
                 ...prev,
-                [name]: checked
+                [name]: value,
+                instructions: instructions,
+                correctAnswer: value === 'multipleCorrect' ? '' : prev.correctAnswer,
+                correctAnswers: value === 'multipleCorrect' ? [] : prev.correctAnswers,
+                numCorrectAnswers: value === 'multipleCorrect' ? 3 : 1
             }));
         } else {
             setFormData(prev => ({
@@ -78,6 +142,33 @@ const QuestionEditModal = ({ question, onClose, onUpdate }) => {
                 return;
             }
 
+            // Validate based on question type
+            if (formData.questionType === 'standard' || formData.questionType === 'fourOptions') {
+                if (!formData.correctAnswer) {
+                    setAlert({
+                        type: 'error',
+                        message: 'Please select a correct answer'
+                    });
+                    return;
+                }
+            } else if (formData.questionType === 'multipleCorrect') {
+                if (formData.correctAnswers.length === 0) {
+                    setAlert({
+                        type: 'error',
+                        message: 'Please select at least one correct answer'
+                    });
+                    return;
+                }
+
+                if (formData.numCorrectAnswers > 0 && formData.correctAnswers.length !== parseInt(formData.numCorrectAnswers)) {
+                    setAlert({
+                        type: 'warning',
+                        message: `You've selected ${formData.correctAnswers.length} answers, but specified ${formData.numCorrectAnswers} correct answers`
+                    });
+                    // Continue anyway - this is just a warning
+                }
+            }
+
             // Submit the form
             const response = await api.put(`/questions/${question._id}`, formData);
 
@@ -106,6 +197,12 @@ const QuestionEditModal = ({ question, onClose, onUpdate }) => {
         } finally {
             setLoading(false);
         }
+    };
+
+    // Get the letters for options based on visible options count
+    const getOptionLetters = () => {
+        const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O'];
+        return letters.slice(0, visibleOptions);
     };
 
     return (
@@ -195,6 +292,52 @@ const QuestionEditModal = ({ question, onClose, onUpdate }) => {
                             </div>
                         </div>
 
+                        {/* Question Type Selector */}
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium mb-1">Question Type</label>
+                            <select
+                                name="questionType"
+                                value={formData.questionType}
+                                onChange={handleChange}
+                                className="w-full p-2 border rounded-md"
+                            >
+                                <option value="standard">Standard (5 options, 1 correct)</option>
+                                <option value="fourOptions">Four Options (4 options, 1 correct)</option>
+                                <option value="multipleCorrect">Multiple Correct (Choose 3)</option>
+                            </select>
+                        </div>
+
+                        {/* Instructions field for special question types */}
+                        {formData.questionType !== 'standard' && (
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium mb-1">Instructions</label>
+                                <input
+                                    type="text"
+                                    name="instructions"
+                                    value={formData.instructions}
+                                    onChange={handleChange}
+                                    className="w-full p-2 border rounded-md"
+                                    placeholder="Special instructions for this question"
+                                />
+                            </div>
+                        )}
+
+                        {/* Number of correct answers for multipleCorrect type */}
+                        {formData.questionType === 'multipleCorrect' && (
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium mb-1">Number of Correct Answers</label>
+                                <input
+                                    type="number"
+                                    name="numCorrectAnswers"
+                                    value={formData.numCorrectAnswers}
+                                    onChange={handleChange}
+                                    min="1"
+                                    max="15"
+                                    className="w-full p-2 border rounded-md"
+                                />
+                            </div>
+                        )}
+
                         <div className="mb-4">
                             <label className="block text-sm font-medium mb-1">Question Text</label>
                             <textarea
@@ -213,7 +356,7 @@ const QuestionEditModal = ({ question, onClose, onUpdate }) => {
                     <div className="mb-6">
                         <h3 className="font-bold mb-2">Options</h3>
 
-                        {['A', 'B', 'C', 'D', 'E'].map(letter => (
+                        {getOptionLetters().map(letter => (
                             <div key={letter} className="mb-3">
                                 <label className="block text-sm font-medium mb-1">
                                     Option {letter}{letter === 'A' || letter === 'B' ? ' *' : ''}
@@ -224,7 +367,7 @@ const QuestionEditModal = ({ question, onClose, onUpdate }) => {
                                     </div>
                                     <input
                                         type="text"
-                                        value={formData.options[letter]}
+                                        value={formData.options[letter] || ''}
                                         onChange={(e) => handleOptionChange(letter, e.target.value)}
                                         className="flex-grow p-2 border rounded-r-md"
                                         placeholder={`Enter option ${letter}`}
@@ -239,24 +382,59 @@ const QuestionEditModal = ({ question, onClose, onUpdate }) => {
                     <div className="mb-6">
                         <h3 className="font-bold mb-2">Answer & Explanation</h3>
 
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium mb-1">Correct Answer</label>
-                            <select
-                                name="correctAnswer"
-                                value={formData.correctAnswer}
-                                onChange={handleChange}
-                                className="w-full p-2 border rounded-md"
-                            >
-                                <option value="">Select Correct Answer</option>
-                                {['A', 'B', 'C', 'D', 'E'].map(letter => (
-                                    formData.options[letter] && (
-                                        <option key={letter} value={letter}>
-                                            {letter}: {formData.options[letter].substring(0, 40)}...
-                                        </option>
-                                    )
-                                ))}
-                            </select>
-                        </div>
+                        {/* For standard and fourOptions types - single correct answer */}
+                        {(formData.questionType === 'standard' || formData.questionType === 'fourOptions') && (
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium mb-1">Correct Answer</label>
+                                <select
+                                    name="correctAnswer"
+                                    value={formData.correctAnswer}
+                                    onChange={handleChange}
+                                    className="w-full p-2 border rounded-md"
+                                >
+                                    <option value="">Select Correct Answer</option>
+                                    {getOptionLetters().map(letter => (
+                                        formData.options[letter] && (
+                                            <option key={letter} value={letter}>
+                                                {letter}: {formData.options[letter].substring(0, 40)}...
+                                            </option>
+                                        )
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        {/* For multipleCorrect type - multiple correct answers */}
+                        {formData.questionType === 'multipleCorrect' && (
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium mb-1">
+                                    Correct Answers (Select {formData.numCorrectAnswers})
+                                </label>
+                                <div className="space-y-2 border p-3 rounded-md">
+                                    {getOptionLetters().map(letter => (
+                                        formData.options[letter] && (
+                                            <div key={letter} className="flex items-center">
+                                                <input
+                                                    type="checkbox"
+                                                    id={`correctAnswer_${letter}`}
+                                                    name={`correctAnswer_${letter}`}
+                                                    checked={formData.correctAnswers.includes(letter)}
+                                                    onChange={handleChange}
+                                                    className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                                                />
+                                                <label htmlFor={`correctAnswer_${letter}`} className="ml-2 text-sm text-gray-900">
+                                                    {letter}: {formData.options[letter].substring(0, 40)}...
+                                                </label>
+                                            </div>
+                                        )
+                                    ))}
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Selected: {formData.correctAnswers.join(', ')}
+                                    ({formData.correctAnswers.length}/{formData.numCorrectAnswers})
+                                </p>
+                            </div>
+                        )}
 
                         <div>
                             <label className="block text-sm font-medium mb-1">Explanation</label>
